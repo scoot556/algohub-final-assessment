@@ -7,6 +7,8 @@ import './App.css';
 import { useEffect, useState } from 'react';
 import {PeraWalletConnect} from '@perawallet/connect';
 import algosdk, { waitForConfirmation } from 'algosdk';
+import { Tooltip } from 'bootstrap';
+import { OverlayTrigger } from 'react-bootstrap';
 
 // Create the PeraWalletConnect instance outside the component
 const peraWallet = new PeraWalletConnect();
@@ -22,9 +24,16 @@ function App() {
   const [accountAddress, setAccountAddress] = useState(null);
   const isConnectedToPeraWallet = !!accountAddress;
   const [localTodos, setLocalTodos] = useState([]);
+  const [tempTodo, setTempTodo] = useState('');
+  const [todoAddButton, setTodoAddButton] = useState(true);
+  const [disableAddButton, setDisableAddButton] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
 
-  const handleClose = () => setShow(false);
+  const handleClose = () => setShow(false) & setTempTodo('');
   const handleShow = () => setShow(true);
+
+  const handleDeleteClose = () => setShow(false);
+  const handleDeleteShow = () => setShow(true);
 
   useEffect(() => {
     if (accountAddress) {
@@ -82,6 +91,13 @@ function App() {
             todos.push({key: Buffer.from(accountInfo['app-local-state']['key-value'][i].key, 'base64').toString('ascii'), value: Buffer.from(accountInfo['app-local-state']['key-value'][i].value.bytes, 'base64').toString('ascii')});
           }
           console.log("TODOS", todos);
+          todos.sort((a,b) => a.key.localeCompare(b.key));
+          // const tempSortTodos = todos.map((todo) => parseInt(todo.key.replace(/^\D+/g, "")));
+         
+          // tempSortTodos.sort((a,b) => a-b);
+          // console.log(tempSortTodos);
+          // console.log("SORTED TODOS", todos);
+          checkMaxTodo(todos.length);
           setLocalTodos(todos);
         } else {
           setLocalTodos([]);
@@ -118,6 +134,7 @@ function App() {
           const { txId } = await algod.sendRawTransaction(signedTx).do();
           const result = await waitForConfirmation(algod, txId, 2);
           checkLocalTodosState();
+          setTempTodo('');
       } catch (e) {
         console.error('There was an error connecting to the todo app: ', e)
       }
@@ -128,10 +145,38 @@ function App() {
       
     }
 
+    const addTodoHandler = (e) => {
+      e.preventDefault();
+      if (e.target.value === '') {
+        setTodoAddButton(true);
+        return;
+      } else {
+        setTempTodo(e.target.value);
+        setTodoAddButton(false);
+      }
+    }
+
+    const removeTodoHandler = (e) => {
+      e.preventDefault();
+     
+    }
+
+    const checkMaxTodo = (length) => {
+      if (length >= 10) {
+        setDisableAddButton(true);
+      } else {
+        setDisableAddButton(false);
+      }
+    }
+
+    const tooltip = (<Tooltip target="disabled-todo" placement="top" id="tooltip" >Too many Todos in List</Tooltip>);
+
   return (
     <div className="App">
       <Container>
+        <br/>
         <h1>AlgoHub Final Assessment - Todo List</h1>
+        <br/>
         <Row>
             <Col>
               <Button className='btn-connect' onClick={
@@ -147,37 +192,73 @@ function App() {
               </Button>
             </Col>
         </Row>
-        <Row>
-          <Container>
-            <Row>Todo List</Row>
+        <br/>
+        <Row className='todo-list-row'>
+          <Container className='todo-list-container'>
             <Row>
               <Col>
-              </Col>
-              <Col>
-                <Button className='btn-add' onClick={handleShow}>Add Todo</Button>
-                {!localTodos && localTodos.length > 0 ? (<p>No todos yet</p>) : (
+              <h4>Todo List</h4>
+              {!localTodos && localTodos.length > 0 ? (<p>No todos yet</p>) : (
                 localTodos?.map((todo, index) => (
                   <div key={index}>{index + 1}: {todo.value}</div>
                 ))
                 )}
-                <Modal show={show} onHide={handleClose}>
+              </Col>
+            </Row>
+          </Container>
+          <Container>
+            <Row>
+                {!todoAddButton ?  <></>: (<p>Your todo list is full! Please remove one before adding another</p>) }
+                <Row className='btn-row'>
+                  <Button className='btn-add' onClick={handleShow} disabled={disableAddButton} data-bs-toggle="modal" data-bs-target="#add-modal">Add Todo</Button>
+                </Row>
+                <Row className='btn-row'>
+                  <Button className='btn-add' onClick={handleDeleteShow} data-bs-toggle="modal" data-bs-target="#delete-modal">Remove Todo</Button>
+                </Row>
+                <Modal show={show} onHide={handleClose} id="add-modal">
                   <Modal.Header closeButton>
                     <Modal.Title>Add Todo</Modal.Title>
                     <Modal.Body>
-                      <input type='text' placeholder='Enter Todo'></input>
+                      <input type='text' placeholder='Enter Todo' value={tempTodo} onChange={(e) => addTodoHandler(e)}></input>
                     </Modal.Body>
                     <Modal.Footer>
                       <Button variant="secondary" onClick={handleClose}>
                         Close
                       </Button>
-                      <Button variant="primary" onClick={() => addTodo('Add_Local_Todo', 'Todo3', 'Testing front end')}>
-                        Save Changes
-                      </Button>
+                        <Button variant="primary" onClick={() => 
+                          addTodo('Add_Local_Todo', localTodos.length > 0 ? `Todo${localTodos.length+1}` : 1, tempTodo) & handleClose()
+                          // console.log('Add_Local_Todo', localTodos.length > 0 ? `Todo${localTodos.length+1}` : 1, tempTodo) & handleClose()
+                          } disabled={todoAddButton} >
+                          Submit
+                        </Button>
                     </Modal.Footer>
                   </Modal.Header>
                 </Modal>
-              </Col>
-            </Row>
+                <Modal show={showDelete} onHide={handleDeleteClose} id="delete-modal" >
+                  <Modal.Header closeButton>
+                    <Modal.Title>Remove Todo</Modal.Title>
+                    <Modal.Body>
+                      {localTodos?.map((todo, index) => (
+                        <div key={index}>{index + 1}: {todo.value}</div>
+                      ))}
+                      <span></span>
+                      {/* <input type='text' placeholder='Remove Todo' value={tempTodo} onChange={(e) => removeTodoHandler(e)}></input> */}
+                    </Modal.Body>
+                    <Modal.Footer>
+                      <Button variant="secondary" onClick={handleClose}>
+                        Close
+                      </Button>
+                        <Button variant="primary" onClick={() => 
+                          // removeTodo('Remove_Local_Todo',  , tempTodo) & handleDeleteClose()
+                          console.log('Remove_Local_Todo', localTodos.length > 0 ? `Todo${localTodos.length+1}` : 1, tempTodo) & handleDeleteClose()
+                          // console.log('Add_Local_Todo', localTodos.length > 0 ? `Todo${localTodos.length+1}` : 1, tempTodo) & handleClose()
+                          }>
+                          Submit
+                        </Button>
+                    </Modal.Footer>
+                  </Modal.Header>
+                </Modal>
+              </Row>
           </Container>
         </Row>
       </Container>
