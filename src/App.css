@@ -59,3 +59,7 @@
 .btn-row {
   margin-top: 10px !important;
 }
+
+.modal-header {
+  flex-direction: column;
+}

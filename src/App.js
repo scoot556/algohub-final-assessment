@@ -8,13 +8,15 @@ import { useEffect, useState } from 'react';
 import {PeraWalletConnect} from '@perawallet/connect';
 import algosdk, { waitForConfirmation } from 'algosdk';
 import { Tooltip } from 'bootstrap';
-import { OverlayTrigger } from 'react-bootstrap';
+// import { InputGroup, OverlayTrigger } from 'react-bootstrap';
+import InputGroup from 'react-bootstrap/InputGroup';
+import { Form } from 'react-bootstrap';
 
 // Create the PeraWalletConnect instance outside the component
 const peraWallet = new PeraWalletConnect();
 
 // The app ID on testnet
-const appIndex = 146076077;
+const appIndex = 147080087;
 
 // connect to the algorand node
 const algod = new algosdk.Algodv2('','https://testnet-api.algonode.cloud', 443);
@@ -28,12 +30,15 @@ function App() {
   const [todoAddButton, setTodoAddButton] = useState(true);
   const [disableAddButton, setDisableAddButton] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
+  const [todoToDelete, setTodoToDelete] = useState(null);
+  const [totalComplete, setTotalComplete] = useState(0);
+  const [tempTodoID, setTempTodoID] = useState(null);
 
   const handleClose = () => setShow(false) & setTempTodo('');
   const handleShow = () => setShow(true);
 
-  const handleDeleteClose = () => setShow(false);
-  const handleDeleteShow = () => setShow(true);
+  const handleDeleteClose = () => setShowDelete(false);
+  const handleDeleteShow = () => setShowDelete(true);
 
   useEffect(() => {
     if (accountAddress) {
@@ -87,11 +92,32 @@ function App() {
         const todoLength = accountInfo['app-local-state']['key-value'].length;
         if(!!accountInfo['app-local-state']['key-value']) {
           const todos = [];
+          let tempTodoCount = [];
           for(let i = 0; i < todoLength; i++) {
-            todos.push({key: Buffer.from(accountInfo['app-local-state']['key-value'][i].key, 'base64').toString('ascii'), value: Buffer.from(accountInfo['app-local-state']['key-value'][i].value.bytes, 'base64').toString('ascii')});
+            if (Buffer.from(accountInfo['app-local-state']['key-value'][i].key, 'base64').toString('ascii') !== "Count") {
+              todos.push({key: Buffer.from(accountInfo['app-local-state']['key-value'][i].key, 'base64').toString('ascii'), value: Buffer.from(accountInfo['app-local-state']['key-value'][i].value.bytes, 'base64').toString('ascii')});
+              let tempCount = (Buffer.from(accountInfo['app-local-state']['key-value'][i].key, 'base64').toString('ascii'));
+              tempTodoCount.push(parseInt(tempCount));
+            } 
+            // else {
+            //   console.log("Count: " + Buffer.from(accountInfo['app-local-state']['key-value'][i].value.bytes, 'base64').toString('ascii'));
+            //   setTotalComplete(Buffer.from(accountInfo['app-local-state']['key-value'][i].value.bytes, 'base64').toString('ascii'));
+            // }
           }
-          console.log("TODOS", todos);
+          // console.log("TODOS", todos, tempTodoCount);
           todos.sort((a,b) => a.key.localeCompare(b.key));
+          tempTodoCount.sort((a,b) => a - b);
+          console.log("TODOS SORTED", todos, tempTodoCount, tempTodoCount.length);;
+          // let XOR = 0;
+          // for(let i=0; i<tempTodoCount.length; i++) {
+          //     if (tempTodoCount[i] !== 0)
+          //         XOR ^= tempTodoCount[i];
+          //         console.log("XOR", XOR);
+          //     XOR ^= (i + 1);
+          //     console.log("SECOND XOR", XOR);
+          // }
+          // console.log(XOR);
+          setTempTodoID(Math.max(...tempTodoCount)+1);
           // const tempSortTodos = todos.map((todo) => parseInt(todo.key.replace(/^\D+/g, "")));
          
           // tempSortTodos.sort((a,b) => a-b);
@@ -141,8 +167,32 @@ function App() {
       
     }
 
-    async function removeTodo(actio, todoID, todoName) {
-      
+    async function removeTodo(action, todoID) {
+      console.log("REMOVE TODO", action, todoID);
+      try {
+        const suggestedParams = await algod.getTransactionParams().do();
+        const appArgs = [new Uint8Array(Buffer.from(action)), new Uint8Array(Buffer.from(todoID))];
+        console.log("APP ARGS", appArgs);
+
+        const removeTodoTxn = algosdk.makeApplicationNoOpTxn(
+          accountAddress,
+          suggestedParams,
+          appIndex,
+          appArgs
+        );
+
+        const removeTodoTxGroup = [{txn: removeTodoTxn, signers: [accountAddress]}];
+
+          const signedTx = await peraWallet.signTransaction([removeTodoTxGroup]);
+          console.log(signedTx);
+          const { txId } = await algod.sendRawTransaction(signedTx).do();
+          const result = await waitForConfirmation(algod, txId, 2);
+          console.log("Remove result", result);
+          checkLocalTodosState();
+      } catch (e) {
+        console.error('There was an error connecting to the todo app: ', e)
+
+      }
     }
 
     const addTodoHandler = (e) => {
@@ -157,7 +207,12 @@ function App() {
     }
 
     const removeTodoHandler = (e) => {
-      e.preventDefault();
+      // console.log(e)
+      // let obj = JSON.parse(e.target.value);
+      let value = e.target.value;
+      // console.log("REMOVE TODO", value, obj);
+      setTodoToDelete(value);
+      
      
     }
 
@@ -171,6 +226,31 @@ function App() {
 
     const tooltip = (<Tooltip target="disabled-todo" placement="top" id="tooltip" >Too many Todos in List</Tooltip>);
 
+    function findMissing(arr, N) {
+      // let i;
+      // let temp = [];
+      // let min = Math.min(...arr);
+      // console.log(min)
+      // for (i = 0; i <= N; i++) {
+      //   temp[i] = 0;
+      // }
+      // for (i=0; i < N; i++) {
+      //   temp[arr[i] - 1] = 1;
+      // }
+      // let ans = 0;
+      // for (i=0;i<=N;i++) {
+      //   if (temp[i] === 0) {
+      //     ans = i+1;
+      //   }
+      // }
+      // console.log(ans);
+      let total = Math.floor((N+1)*(N+2)/2);
+      for (let i = 0; i < N; i++) {
+        total -= arr[i];
+      }
+      console.log(total);
+    }
+
   return (
     <div className="App">
       <Container>
@@ -182,6 +262,7 @@ function App() {
               <Button className='btn-connect' onClick={
         isConnectedToPeraWallet ? handleDisconnectWalletClick : handleConnectWalletClick
       }>{isConnectedToPeraWallet ? "Disconnect" : "Connect to Pera Wallet"}</Button>
+      {totalComplete ? <h3>Total Complete: {totalComplete}</h3> : null}
             </Col>
             <Col>
               <Button className="btn-wallet"
@@ -226,8 +307,8 @@ function App() {
                         Close
                       </Button>
                         <Button variant="primary" onClick={() => 
-                          addTodo('Add_Local_Todo', localTodos.length > 0 ? `Todo${localTodos.length+1}` : 1, tempTodo) & handleClose()
-                          // console.log('Add_Local_Todo', localTodos.length > 0 ? `Todo${localTodos.length+1}` : 1, tempTodo) & handleClose()
+                          addTodo('Add_Local_Todo', localTodos.length > 0 ? `${tempTodoID}` : '0', tempTodo) & handleClose()
+                          // console.log('Add_Local_Todo', localTodos.length > 0 ? localTodos.length+1 : 0, tempTodo) & handleClose()
                           } disabled={todoAddButton} >
                           Submit
                         </Button>
@@ -238,19 +319,36 @@ function App() {
                   <Modal.Header closeButton>
                     <Modal.Title>Remove Todo</Modal.Title>
                     <Modal.Body>
-                      {localTodos?.map((todo, index) => (
-                        <div key={index}>{index + 1}: {todo.value}</div>
-                      ))}
+                      {/* <Row>
+                        <Col>
+                          <h4>Todo</h4>
+                        </Col>
+                        <Col>
+                          <h4>Remove?</h4>
+                        </Col>
+                      </Row> */}
+                      <Row>
+                        <Col>
+                          <Form.Select aria-label='Select Todo to Remove' onChange={(e) => removeTodoHandler(e)}>
+                            <option value=''>Select Todo to Remove</option>
+                            {localTodos?.map((todo) => (
+                              <>
+                                <option value={todo.key} key={todo.key}>{todo.value}</option>
+                              </>
+                            ))}
+                          </Form.Select>
+                        </Col>
+                      </Row>
                       <span></span>
                       {/* <input type='text' placeholder='Remove Todo' value={tempTodo} onChange={(e) => removeTodoHandler(e)}></input> */}
                     </Modal.Body>
                     <Modal.Footer>
-                      <Button variant="secondary" onClick={handleClose}>
+                      <Button variant="secondary" onClick={handleDeleteClose}>
                         Close
                       </Button>
                         <Button variant="primary" onClick={() => 
-                          // removeTodo('Remove_Local_Todo',  , tempTodo) & handleDeleteClose()
-                          console.log('Remove_Local_Todo', localTodos.length > 0 ? `Todo${localTodos.length+1}` : 1, tempTodo) & handleDeleteClose()
+                          removeTodo('Complete_Local_Todo', todoToDelete) & handleDeleteClose()
+                          // console.log('Remove_Local_Todo', todoToDelete) & handleDeleteClose()
                           // console.log('Add_Local_Todo', localTodos.length > 0 ? `Todo${localTodos.length+1}` : 1, tempTodo) & handleClose()
                           }>
                           Submit
