@@ -7,7 +7,6 @@ import './App.css';
 import { useEffect, useState } from 'react';
 import {PeraWalletConnect} from '@perawallet/connect';
 import algosdk, { waitForConfirmation } from 'algosdk';
-import { Tooltip } from 'bootstrap';
 import { Form } from 'react-bootstrap';
 
 // Create the PeraWalletConnect instance outside the component
