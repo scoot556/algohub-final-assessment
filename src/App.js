@@ -16,7 +16,7 @@ import { Form } from 'react-bootstrap';
 const peraWallet = new PeraWalletConnect();
 
 // The app ID on testnet
-const appIndex = 147080087;
+const appIndex = 147444880;
 
 // connect to the algorand node
 const algod = new algosdk.Algodv2('','https://testnet-api.algonode.cloud', 443);
@@ -33,6 +33,7 @@ function App() {
   const [todoToDelete, setTodoToDelete] = useState(null);
   const [totalComplete, setTotalComplete] = useState(0);
   const [tempTodoID, setTempTodoID] = useState(null);
+  const [totalLocalComplete, setTotalLocalComplete] = useState(0);
 
   const handleClose = () => setShow(false) & setTempTodo('');
   const handleShow = () => setShow(true);
@@ -89,6 +90,7 @@ function App() {
     async function checkLocalTodosState() {
       try {
         const accountInfo = await algod.accountApplicationInformation(accountAddress,appIndex).do();
+        const counter = await algod.getApplicationByID(appIndex).do();
         const todoLength = accountInfo['app-local-state']['key-value'].length;
         if(!!accountInfo['app-local-state']['key-value']) {
           const todos = [];
@@ -98,7 +100,9 @@ function App() {
               todos.push({key: Buffer.from(accountInfo['app-local-state']['key-value'][i].key, 'base64').toString('ascii'), value: Buffer.from(accountInfo['app-local-state']['key-value'][i].value.bytes, 'base64').toString('ascii')});
               let tempCount = (Buffer.from(accountInfo['app-local-state']['key-value'][i].key, 'base64').toString('ascii'));
               tempTodoCount.push(parseInt(tempCount));
-            } 
+            } else if (Buffer.from(accountInfo['app-local-state']['key-value'][i].key, 'base64').toString('ascii') === "Count") {
+              setTotalLocalComplete(accountInfo['app-local-state']['key-value'][i].value.uint);
+            }
             // else {
             //   console.log("Count: " + Buffer.from(accountInfo['app-local-state']['key-value'][i].value.bytes, 'base64').toString('ascii'));
             //   setTotalComplete(Buffer.from(accountInfo['app-local-state']['key-value'][i].value.bytes, 'base64').toString('ascii'));
@@ -127,6 +131,12 @@ function App() {
           setLocalTodos(todos);
         } else {
           setLocalTodos([]);
+        }
+
+        if(!!counter.params['global-state'][0].value.uint) {
+          setTotalComplete(counter.params['global-state'][0].value.uint);
+        } else {
+          setTotalComplete(0);
         }
         // if(!!accountInfo['app-local-state']['key-value'][0].value.bytes) {
         //   setLocalTodos([...localTodos, Buffer.from(accountInfo['app-local-state']['key-value'][1].value.bytes, 'base64').toString('ascii')]);
@@ -260,9 +270,12 @@ function App() {
         <Row>
             <Col>
               <Button className='btn-connect' onClick={
-        isConnectedToPeraWallet ? handleDisconnectWalletClick : handleConnectWalletClick
-      }>{isConnectedToPeraWallet ? "Disconnect" : "Connect to Pera Wallet"}</Button>
-      {totalComplete ? <h3>Total Complete: {totalComplete}</h3> : null}
+                isConnectedToPeraWallet ? handleDisconnectWalletClick : handleConnectWalletClick}>{isConnectedToPeraWallet ? "Disconnect" : "Connect to Pera Wallet"}
+              </Button>
+            </Col>
+            <Col>
+              {totalComplete ? <h4>Total Global Complete: {totalComplete}</h4> : null}
+              {totalLocalComplete ? <h4>Total User Completed Todos: {totalLocalComplete}</h4> : null}
             </Col>
             <Col>
               <Button className="btn-wallet"
